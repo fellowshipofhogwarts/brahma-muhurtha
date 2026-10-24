@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Brahma Muhurtha calculator: wake-up time 96 minutes before sunrise and an adjustable sleep schedule.">
+    <meta name="theme-color" content="#0f172a">
+    <title>Brahma Muhurtha Calculator</title>
+    <!-- v4: quick cities = Erlangen, Munich, Bengaluru, Stockholm, Trollhättan.
+         v3: "Muhurtha starts / ends" wording everywhere, midnight date pinning (Q1/Q3), 2x2 timeline on narrow screens, credit line.
+         v2: single heading, neutral search hint, "Muhurtha ends" label + timeline hint.
+         v1: plain CSS (no Tailwind CDN), all functions written, timezone/DST-safe calculations. -->
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --c-900: #0f172a; --c-800: #1e1b4b; --c-700: #312e81; --c-600: #4338ca;
+            --c-500: #6366f1; --c-400: #818cf8; --c-300: #a5b4fc; --c-200: #c7d2fe; --c-100: #e0e7ff;
+            --amber-300: #fcd34d; --amber-200: #fde68a;
+            --purple-200: #e9d5ff; --purple-300: #d8b4fe; --purple-500: #a855f7; --purple-950: #3b0764;
+            --red-200: #fecaca;
+            --radius-lg: 24px; --radius-md: 16px; --radius-sm: 12px;
+            --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+        }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            margin: 0; min-height: 100vh; padding: 16px;
+            display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+            font-family: var(--font); line-height: 1.4; color: #fff;
+            background: linear-gradient(135deg, var(--c-900) 0%, var(--c-800) 55%, #14123a 100%);
+            background-attachment: fixed;
+        }
+        @media (min-width: 640px) { body { padding: 24px; } }
+        [hidden] { display: none !important; }
+        button, input, output { font: inherit; color: inherit; }
+        :focus-visible { outline: 2px solid var(--c-400); outline-offset: 2px; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+        /* Header */
+        .app-header { width: 100%; max-width: 28rem; text-align: center; padding: 16px 0; }
+        .title { margin: 0; font-size: clamp(1.5rem, 5vw, 1.9rem); font-weight: 800; letter-spacing: -.02em;
+            background: linear-gradient(90deg, var(--amber-300), var(--purple-300), #fff);
+            -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .subtitle { margin: 4px 0 0; font-size: 13px; color: var(--c-300); }
+
+        /* Card */
+        .card { width: 100%; max-width: 28rem; padding: 20px; margin-bottom: 24px;
+            background: rgba(30,27,75,.8); border: 1px solid rgba(67,56,202,.4); border-radius: var(--radius-lg);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 25px 50px -12px rgba(0,0,0,.5); }
+        @media (min-width: 640px) { .card { padding: 24px; } }
+
+        /* Banner */
+        .banner { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+            margin-bottom: 16px; padding: 12px; border-radius: var(--radius-sm); font-size: 13px; }
+        .banner--error { background: rgba(69,10,10,.8); border: 1px solid rgba(239,68,68,.5); color: var(--red-200); }
+        .banner--info { background: rgba(30,58,138,.55); border: 1px solid rgba(129,140,248,.5); color: var(--c-100); }
+        .banner-close { flex-shrink: 0; background: none; border: 0; padding: 0 4px; font-weight: 700; cursor: pointer; opacity: .8; }
+        .banner-close:hover { opacity: 1; }
+
+        /* Location */
+        .label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--c-300); }
+        .search-row { display: flex; gap: 8px; }
+        .input { flex: 1; min-width: 0; padding: 12px 16px; font-size: 14px; color: #fff;
+            background: rgba(15,23,42,.9); border: 1px solid var(--c-600); border-radius: var(--radius-sm); }
+        .input::placeholder { color: var(--c-400); }
+        .input:focus { outline: none; border-color: transparent; box-shadow: 0 0 0 2px var(--c-400); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; min-height: 46px; padding: 0 14px;
+            border-radius: var(--radius-sm); cursor: pointer; transition: background-color .15s, opacity .15s; }
+        .btn svg { width: 20px; height: 20px; }
+        .btn-primary { background: var(--c-600); border: 0; box-shadow: 0 10px 15px -3px rgba(79,70,229,.3); }
+        .btn-primary:hover { background: var(--c-500); }
+        .btn-secondary { background: var(--c-700); border: 1px solid rgba(99,102,241,.4); color: var(--c-100); }
+        .btn-secondary:hover { background: var(--c-600); }
+        .btn:disabled { opacity: .5; cursor: progress; }
+        .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+        .chips-label { margin-right: 2px; font-size: 12px; color: var(--c-400); }
+        .chip { padding: 4px 10px; font-size: 12px; color: var(--c-200); cursor: pointer;
+            background: rgba(15,23,42,.8); border: 1px solid var(--c-700); border-radius: 8px; }
+        .chip:hover { background: rgba(49,46,129,.7); }
+        .chip[aria-pressed="true"] { border-color: var(--c-400); color: #fff; }
+        .location-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            margin-top: 10px; padding: 0 4px; font-size: 13px; color: var(--c-300); }
+        .location-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+        .tz-badge { flex-shrink: 0; padding: 2px 8px; font-size: 11px; color: var(--amber-300);
+            background: rgba(15,23,42,.8); border: 1px solid var(--c-600); border-radius: 6px; }
+
+        /* Tabs & date */
+        .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; padding: 6px;
+            background: rgba(15,23,42,.6); border: 1px solid rgba(49,46,129,.6); border-radius: var(--radius-md); }
+        .tab { display: flex; flex-direction: column; align-items: center; padding: 10px 12px; font-size: 14px; font-weight: 600;
+            color: var(--c-300); background: transparent; border: 0; border-radius: var(--radius-sm); cursor: pointer;
+            transition: background-color .15s, color .15s; }
+        .tab:hover { color: #fff; }
+        .tab.is-active { background: var(--c-600); color: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,.3); }
+        .tab-date { font-size: 11px; font-weight: 400; opacity: .85; }
+        .date-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+        .date-label { font-size: 13px; color: var(--c-300); }
+        .date-input { padding: 6px 8px; font-size: 13px; color: #fff; color-scheme: dark;
+            background: var(--c-900); border: 1px solid var(--c-600); border-radius: 8px; }
+        .date-input.is-active { border-color: var(--c-400); box-shadow: 0 0 0 1px var(--c-400); }
+
+        /* Sleep slider */
+        .panel { margin-bottom: 20px; padding: 14px; background: rgba(15,23,42,.5); border: 1px solid rgba(49,46,129,.5); border-radius: var(--radius-md); }
+        .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .panel-title { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--purple-300); }
+        .pill { padding: 2px 10px; font-size: 12px; font-weight: 700; background: var(--purple-950); border: 1px solid rgba(168,85,247,.4); border-radius: 999px; }
+        .slider { width: 100%; margin: 0; accent-color: var(--purple-500); cursor: pointer; }
+        .scale { display: flex; justify-content: space-between; margin-top: 4px; padding: 0 4px; font-size: 11px; color: var(--c-400); }
+
+        .divider { margin: 16px 0; border: 0; border-top: 1px solid rgba(49,46,129,.6); }
+        .loading { padding: 8px 0 12px; text-align: center; font-size: 13px; color: var(--c-300); }
+        .loading p { margin: 0; }
+        .spinner { display: inline-block; width: 28px; height: 28px; margin-bottom: 6px;
+            border: 4px solid var(--c-500); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.5s; } * { transition: none !important; } }
+
+        /* Results */
+        .results { display: flex; flex-direction: column; gap: 16px; transition: opacity .2s; }
+        .results.is-dim { opacity: .4; }
+        .date-heading { padding: 8px 12px; text-align: center; font-size: 13px; font-weight: 600; color: var(--c-200);
+            background: rgba(15,23,42,.5); border: 1px solid rgba(49,46,129,.5); border-radius: var(--radius-sm); }
+        .note { padding: 8px 12px; font-size: 12px; line-height: 1.45; border-radius: var(--radius-sm); }
+        .note--dst { background: rgba(120,53,15,.35); border: 1px solid rgba(251,191,36,.4); color: var(--amber-200); }
+        .note--polar { background: rgba(15,23,42,.7); border: 1px solid var(--c-600); color: var(--c-200); }
+        .timeline { display: grid; grid-template-columns: repeat(4, 1fr); padding: 10px 4px; text-align: center; font-size: 11px;
+            background: rgba(15,23,42,.7); border: 1px solid rgba(49,46,129,.6); border-radius: var(--radius-sm); }
+        .timeline-item { display: flex; flex-direction: column; gap: 2px; }
+        .timeline-item + .timeline-item { border-left: 1px dashed rgba(99,102,241,.35); }
+        .tl-label { font-weight: 700; white-space: nowrap; }
+        .tl-time { font-family: var(--mono); font-size: 13px; color: #fff; }
+        .timeline-hint { grid-column: 1 / -1; margin-top: 8px; padding-top: 6px; font-size: 11px; color: var(--c-400);
+            border-top: 1px solid rgba(49,46,129,.6); }
+        /* Narrow screens: 2 x 2 grid so every label stays on one line at a readable size */
+        @media (max-width: 479px) {
+            .timeline { grid-template-columns: repeat(2, 1fr); row-gap: 10px; padding: 10px 6px; }
+            .timeline-item + .timeline-item { border-left: 0; }
+            .timeline-item:nth-child(even) { border-left: 1px dashed rgba(99,102,241,.35); }
+        }
+        .c-purple { color: var(--purple-300); } .c-amber { color: var(--amber-300); }
+        .c-orange { color: var(--amber-200); } .c-indigo { color: var(--c-300); }
+
+        .hero { padding: 16px; text-align: center; border-radius: var(--radius-md); }
+        .hero--wake { background: linear-gradient(135deg, rgba(30,27,75,.85), var(--c-900)); border: 2px solid rgba(99,102,241,.5); }
+        .hero--bed { background: linear-gradient(135deg, rgba(59,7,100,.9), var(--c-900)); border: 1px solid rgba(168,85,247,.5); }
+        .hero-label { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+        .hero--wake .hero-label { color: var(--c-300); }
+        .hero--bed .hero-label { color: var(--purple-300); }
+        .hero-time { margin: 4px 0; font-family: var(--mono); font-weight: 900; letter-spacing: -.02em; font-size: clamp(1.9rem, 8vw, 2.4rem); }
+        .hero--wake .hero-time { color: var(--amber-300); }
+        .hero--bed .hero-time { color: var(--purple-200); font-size: clamp(1.6rem, 7vw, 2rem); }
+        .hero-sub { font-size: 13px; color: var(--c-300); }
+        .hero--bed .hero-sub { color: rgba(216,180,254,.85); }
+        .window-chip { display: inline-block; margin-top: 8px; padding: 3px 10px; font-size: 12px; color: var(--c-100);
+            background: rgba(15,23,42,.7); border: 1px solid rgba(99,102,241,.4); border-radius: 999px; }
+        .window-chip strong { font-family: var(--mono); color: var(--amber-200); }
+
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .stat { display: flex; flex-direction: column; justify-content: center; padding: 12px; text-align: center;
+            background: rgba(15,23,42,.8); border: 1px solid rgba(49,46,129,.5); border-radius: var(--radius-sm); }
+        .stat-label { margin-bottom: 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--c-400); }
+        .stat-value { font-family: var(--mono); font-size: 18px; font-weight: 700; }
+        .stat-value--countdown { font-size: 16px; color: var(--c-300); }
+        .stat-hint { margin-top: 6px; padding-top: 6px; font-size: 11px; line-height: 1.3; color: var(--c-400); border-top: 1px solid rgba(49,46,129,.6); }
+
+        /* Footer */
+        .app-footer { width: 100%; max-width: 28rem; padding: 8px 0; text-align: center; font-size: 12px; line-height: 1.5; color: var(--c-400); }
+        .app-footer p { margin: 2px 0; }
+        .app-footer a { color: var(--c-300); }
+        .credit { margin-top: 8px !important; padding-top: 8px; border-top: 1px solid rgba(49,46,129,.6); color: var(--c-300); }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <h1 class="title">Brahma Muhurtha Calculator</h1>
+        <p class="subtitle">Wake 96 min before sunrise &amp; plan your sleep</p>
+    </header>
+
+    <!-- Main Card -->
+    <main class="card">
+        <!-- Error / info banner -->
+        <div id="banner" class="banner" hidden>
+            <span id="bannerText"></span>
+            <button type="button" id="bannerClose" class="banner-close" aria-label="Dismiss message">✕</button>
+        </div>
+
+        <!-- Location -->
+        <section aria-label="Location">
+            <label for="cityInput" class="label">Location</label>
+            <div class="search-row">
+                <input type="text" id="cityInput" class="input" placeholder="Search another city…" aria-describedby="activeLocationLabel" autocomplete="off" maxlength="100" enterkeyhint="search">
+                <button type="button" id="searchBtn" class="btn btn-primary" aria-label="Search city" title="Search city">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </button>
+                <button type="button" id="gpsBtn" class="btn btn-secondary" aria-label="Use my current location" title="Use my current location">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="1" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="23" y2="12"/></svg>
+                </button>
+            </div>
+
+            <div class="chips" role="group" aria-label="Quick select city">
+                <span class="chips-label">Quick:</span>
+                <button type="button" class="chip" data-city="Erlangen, Germany" data-lat="49.5960" data-lon="11.0040">Erlangen</button>
+                <button type="button" class="chip" data-city="Munich, Germany" data-lat="48.1351" data-lon="11.5820">Munich</button>
+                <button type="button" class="chip" data-city="Bengaluru, India" data-lat="12.9716" data-lon="77.5946">Bengaluru</button>
+                <button type="button" class="chip" data-city="Stockholm, Sweden" data-lat="59.3293" data-lon="18.0686">Stockholm</button>
+                <button type="button" class="chip" data-city="Trollhättan, Sweden" data-lat="58.2837" data-lon="12.2886">Trollhättan</button>
+            </div>
+
+            <div class="location-meta">
+                <span id="activeLocationLabel" class="location-name">Erlangen, Germany</span>
+                <span id="timezoneBadge" class="tz-badge" title="Time zone of the selected location on the selected date">--</span>
+            </div>
+        </section>
+
+        <!-- Day tabs -->
+        <div class="tabs" role="tablist" aria-label="Choose day">
+            <button type="button" id="tabToday" class="tab is-active" role="tab" aria-selected="true" aria-controls="resultsCard">
+                <span>Today</span>
+                <span id="tabDateToday" class="tab-date">--</span>
+            </button>
+            <button type="button" id="tabTomorrow" class="tab" role="tab" aria-selected="false" aria-controls="resultsCard">
+                <span>Tomorrow</span>
+                <span id="tabDateTomorrow" class="tab-date">--</span>
+            </button>
+        </div>
+
+        <!-- Custom date -->
+        <div class="date-row">
+            <label for="customDateInput" id="customDateLabel" class="date-label">Or pick a date (next 16 days):</label>
+            <input type="date" id="customDateInput" class="date-input">
+        </div>
+
+        <!-- Sleep duration -->
+        <div class="panel">
+            <div class="panel-head">
+                <label for="sleepSlider" class="panel-title">Sleep target duration</label>
+                <output id="sleepDurationLabel" for="sleepSlider" class="pill">8.0 hours</output>
+            </div>
+            <input type="range" id="sleepSlider" class="slider" min="7" max="9" step="0.5" value="8" aria-valuetext="8.0 hours">
+            <div class="scale" aria-hidden="true"><span>7h</span><span>8h</span><span>9h</span></div>
+        </div>
+
+        <hr class="divider">
+
+        <div id="loadingState" class="loading" role="status" hidden>
+            <div class="spinner" aria-hidden="true"></div>
+            <p>Calculating solar &amp; sleep times…</p>
+        </div>
+
+        <!-- Results -->
+        <section id="resultsCard" class="results" role="tabpanel" aria-labelledby="tabToday">
+            <p id="srSummary" class="sr-only" aria-live="polite"></p>
+
+            <div id="resultDateHeading" class="date-heading">--</div>
+
+            <div id="dstNote" class="note note--dst" hidden></div>
+            <div id="polarNote" class="note note--polar" hidden></div>
+
+            <div class="timeline" aria-label="Timeline">
+                <div class="timeline-item"><span class="tl-label c-purple">Bedtime</span><span id="timelineBedtime" class="tl-time">--:--</span></div>
+                <div class="timeline-item"><span class="tl-label c-amber">Muhurtha starts</span><span id="timelineWakeup" class="tl-time">--:--</span></div>
+                <div class="timeline-item"><span class="tl-label c-orange">Muhurtha ends</span><span id="timelineWindowEnd" class="tl-time">--:--</span></div>
+                <div class="timeline-item"><span class="tl-label c-indigo">Sunrise</span><span id="timelineSunrise" class="tl-time">--:--</span></div>
+                <div class="timeline-hint">Brahma Muhurtha: 96 → 48 min before sunrise</div>
+            </div>
+
+            <div class="hero hero--wake">
+                <span class="hero-label">Wake-up time · Brahma Muhurtha begins</span>
+                <div id="targetTimeDisplay" class="hero-time">--:--</div>
+                <div class="hero-sub">96 minutes before sunrise</div>
+                <div class="window-chip">Muhurtha: <strong id="windowDisplay">--:-- – --:--</strong></div>
+            </div>
+
+            <div class="hero hero--bed">
+                <span id="bedtimeHeaderLabel" class="hero-label">Ideal bedtime (8.0 hours sleep)</span>
+                <div id="bedtimeDisplay" class="hero-time">--:--</div>
+                <div id="bedtimeDateDisplay" class="hero-sub">--</div>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <span class="stat-label">Actual sunrise</span>
+                    <span id="sunriseDisplay" class="stat-value">--:--</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Time until wake-up</span>
+                    <span id="countdownDisplay" class="stat-value stat-value--countdown">--:--:--</span>
+                    <span id="countdownHint" class="stat-hint">Time remaining until your pre-sunrise awakening</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <p>Sunrise data: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> (CC BY 4.0) · Place search: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a></p>
+        <p>Your location is stored only in this browser and is sent to these services solely to calculate sunrise times.</p>
+        <p>Brahma Muhurtha: the 48-minute muhurtha from 96 to 48 minutes before sunrise. All times are in the location's own time zone.</p>
+        <p class="credit">Developed by Shashank with the help of Claude</p>
+    </footer>
+
+    <script>
+    (() => {
+        'use strict';
+
+        /* ================= Configuration ================= */
+        const CONFIG = Object.freeze({
+            WAKE_BEFORE_SUNRISE_MIN: 96,
+            WINDOW_END_BEFORE_SUNRISE_MIN: 48,
+            FORECAST_DAYS: 16,
+            CACHE_TTL_MS: 30 * 60 * 1000,
+            NOMINATIM_MIN_INTERVAL_MS: 1100,      // Nominatim policy: max 1 request / second
+            FETCH_TIMEOUT_MS: 12000,
+            SLEEP_MIN_H: 7,
+            SLEEP_MAX_H: 9,
+            DEFAULT_LOCATION: { name: 'Erlangen, Germany', lat: 49.5960, lon: 11.0040 },
+            DEFAULT_SLEEP_H: 8
+        });
+        const STORAGE_KEYS = Object.freeze({ lat: 'sunrise_lat', lon: 'sunrise_lon', city: 'sunrise_city', sleep: 'sunrise_sleep' });
+        const MINUTE_MS = 60 * 1000;
+        const HOUR_MS = 60 * MINUTE_MS;
+        const SHORT_DAY = { weekday: 'short', day: 'numeric', month: 'short' };
+        const LONG_DAY = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+
+        /* ================= State ================= */
+        const state = {
+            lat: CONFIG.DEFAULT_LOCATION.lat,
+            lon: CONFIG.DEFAULT_LOCATION.lon,
+            cityName: CONFIG.DEFAULT_LOCATION.name,
+            sleepHours: CONFIG.DEFAULT_SLEEP_H,
+            activeTab: 'today',          // 'today' | 'tomorrow' | 'custom'
+            customDate: null,            // 'YYYY-MM-DD' when activeTab === 'custom'
+            autoAdvanced: false,         // true when we switched to tomorrow automatically
+            forecast: null,              // { key, tz, days: [{ date, sunrise, hasSunrise, polar }] }
+            target: null,                // { wake, windowEnd } absolute ms
+            lastTodayStr: null,          // "today" at the location when we last rendered (for midnight rollover)
+            bannerType: null
+        };
+        const forecastCache = new Map();
+        let forecastController = null;
+        let forecastRequestId = 0;
+        let locationRequestId = 0;
+        let activeGeoRequests = 0;
+        let lastNominatimAt = 0;
+        let countdownTimer = null;
+        const els = {};
+
+        /* ================= Time-zone helpers (location time zone, not browser) ================= */
+        const formatterCache = new Map();
+        function getFormatter(locale, opts) {
+            const key = locale + JSON.stringify(opts);
+            let f = formatterCache.get(key);
+            if (!f) { f = new Intl.DateTimeFormat(locale, opts); formatterCache.set(key, f); }
+            return f;
+        }
+        const pad = n => String(n).padStart(2, '0');
+
+        function partsInTz(ms, tz) {
+            const parts = getFormatter('en-US', {
+                timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+            }).formatToParts(new Date(ms));
+            const o = {};
+            for (const p of parts) if (p.type !== 'literal') o[p.type] = parseInt(p.value, 10);
+            if (o.hour === 24) o.hour = 0;
+            return o;
+        }
+        function ymdInTz(ms, tz) {
+            const p = partsInTz(ms, tz);
+            return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+        }
+        function offsetMinutes(ms, tz) {
+            const p = partsInTz(ms, tz);
+            const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+            return Math.round((asUtc - Math.floor(ms / 1000) * 1000) / MINUTE_MS);
+        }
+        function formatOffset(min) {
+            const sign = min < 0 ? '-' : '+';
+            const abs = Math.abs(min);
+            const h = Math.floor(abs / 60), m = abs % 60;
+            return `UTC${sign}${h}${m ? ':' + pad(m) : ''}`;
+        }
+        function tzAbbrev(ms, tz) {
+            try {
+                const part = getFormatter('en-GB', { timeZone: tz, timeZoneName: 'short' })
+                    .formatToParts(new Date(ms)).find(p => p.type === 'timeZoneName');
+                const v = part ? part.value : '';
+                if (!v || /^(GMT|UTC)[+\-−]/.test(v)) return null; // no real abbreviation available
+                return v;
+            } catch (e) { return null; }
+        }
+        function tzLabel(ms, tz) {
+            const off = formatOffset(offsetMinutes(ms, tz));
+            const abbr = tzAbbrev(ms, tz);
+            return abbr ? `${abbr} (${off})` : off;
+        }
+        function formatTime(ms, tz) {
+            return getFormatter('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms));
+        }
+        // Calendar-date formatting for 'YYYY-MM-DD' strings (time-zone independent).
+        function formatDateStr(str, opts) {
+            const [y, m, d] = str.split('-').map(Number);
+            return getFormatter('en-GB', { ...opts, timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+        }
+        function addDaysToDateStr(str, n) {
+            const [y, m, d] = str.split('-').map(Number);
+            return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+        }
+        function formatDuration(ms) {
+            const total = Math.max(0, Math.floor(ms / 1000));
+            const d = Math.floor(total / 86400);
+            const h = Math.floor((total % 86400) / 3600);
+            const m = Math.floor((total % 3600) / 60);
+            const s = total % 60;
+            return `${d > 0 ? d + 'd ' : ''}${pad(h)}:${pad(m)}:${pad(s)}`;
+        }
+        function isValidTimeZone(tz) {
+            if (typeof tz !== 'string' || !tz) return false;
+            try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch (e) { return false; }
+        }
+
+        /* ================= Generic helpers ================= */
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const roundTo = (n, dp) => Math.round(n * 10 ** dp) / 10 ** dp;
+        const isValidCoord = (lat, lon) =>
+            Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+        const sanitizeName = name => String(name || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Selected location';
+        function userError(msg) { const e = new Error(msg); e.userFacing = true; return e; }
+
+        function friendlyError(err, service) {
+            if (err && err.userFacing) return err.message;
+            if (navigator.onLine === false) return 'You appear to be offline. Check your internet connection and try again.';
+            if (err && err.isTimeout) return `The ${service} took too long to respond. Please try again.`;
+            if (err && err.status === 429) return `Too many requests to the ${service}. Please wait a few seconds and try again.`;
+            if (err && err.status >= 500) return `The ${service} is temporarily unavailable. Please try again later.`;
+            if (err && err.status) return `The ${service} returned an error (HTTP ${err.status}).`;
+            return `Couldn't reach the ${service}. Please check your connection and try again.`;
+        }
+
+        // fetch + JSON with timeout, external abort and HTTP status check.
+        // Only the CORS-safelisted "Accept" header is sent (no pre-flight; browsers ignore custom User-Agent anyway).
+        async function fetchJson(url, { signal, timeoutMs = CONFIG.FETCH_TIMEOUT_MS } = {}) {
+            const ctrl = new AbortController();
+            let timedOut = false;
+            const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs);
+            const onAbort = () => ctrl.abort();
+            if (signal) {
+                if (signal.aborted) ctrl.abort();
+                else signal.addEventListener('abort', onAbort, { once: true });
+            }
+            try {
+                const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+                if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
+                return await res.json();
+            } catch (e) {
+                if (timedOut) { const t = new Error('timeout'); t.isTimeout = true; throw t; }
+                throw e;
+            } finally {
+                clearTimeout(timer);
+                if (signal) signal.removeEventListener('abort', onAbort);
+            }
+        }
+
+        // Nominatim with a 1 request/second throttle (slot reserved before waiting).
+        async function nominatimFetch(url) {
+            const now = Date.now();
+            const slot = Math.max(now, lastNominatimAt + CONFIG.NOMINATIM_MIN_INTERVAL_MS);
+            lastNominatimAt = slot;
+            if (slot > now) await sleep(slot - now);
+            return fetchJson(url);
+        }
+
+        /* ================= Persistence ================= */
+        function loadSavedState() {
+            try {
+                const lat = parseFloat(localStorage.getItem(STORAGE_KEYS.lat));
+                const lon = parseFloat(localStorage.getItem(STORAGE_KEYS.lon));
+                if (isValidCoord(lat, lon)) {
+                    state.lat = lat;
+                    state.lon = lon;
+                    const city = localStorage.getItem(STORAGE_KEYS.city);
+                    state.cityName = city && city.trim()
+                        ? sanitizeName(city)
+                        : `Saved location (${lat.toFixed(2)}°, ${lon.toFixed(2)}°)`;
+                }
+                const s = parseFloat(localStorage.getItem(STORAGE_KEYS.sleep));
+                if (Number.isFinite(s) && s >= CONFIG.SLEEP_MIN_H && s <= CONFIG.SLEEP_MAX_H) {
+                    state.sleepHours = Math.round(s * 2) / 2;
+                }
+            } catch (e) {
+                console.warn('localStorage unavailable:', e);
+            }
+        }
+        function persistState() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.lat, String(state.lat));
+                localStorage.setItem(STORAGE_KEYS.lon, String(state.lon));
+                localStorage.setItem(STORAGE_KEYS.city, state.cityName);
+                localStorage.setItem(STORAGE_KEYS.sleep, String(state.sleepHours));
+            } catch (e) {
+                console.warn('Could not save to localStorage:', e);
+            }
+        }
+
+        /* ================= UI helpers ================= */
+        function showBanner(message, type = 'error') {
+            els.banner.className = `banner banner--${type}`;
+            els.banner.setAttribute('role', type === 'error' ? 'alert' : 'status');
+            els.bannerText.textContent = message;
+            els.banner.hidden = false;
+            state.bannerType = type;
+        }
+        function hideBanner(onlyType) {
+            if (onlyType && state.bannerType !== onlyType) return;
+            els.banner.hidden = true;
+            state.bannerType = null;
+        }
+        function setLoading(on) {
+            els.loadingState.hidden = !on;
+            els.resultsCard.classList.toggle('is-dim', on);
+            els.resultsCard.setAttribute('aria-busy', String(on));
+        }
+        function updateGeoBusy() {
+            const busy = activeGeoRequests > 0;
+            els.searchBtn.disabled = busy;
+            els.gpsBtn.disabled = busy;
+        }
+        function updateLocationLabel() {
+            els.activeLocationLabel.textContent = state.cityName;
+            els.activeLocationLabel.title = state.cityName;
+            els.chips.forEach(c => c.setAttribute('aria-pressed', String(c.dataset.city === state.cityName)));
+        }
+        function updateSleepLabels() {
+            const txt = `${state.sleepHours.toFixed(1)} hours`;
+            els.sleepDurationLabel.textContent = txt;
+            els.sleepSlider.setAttribute('aria-valuetext', txt);
+            els.bedtimeHeaderLabel.textContent = `Ideal bedtime (${state.sleepHours.toFixed(1)} hours sleep)`;
+        }
+        function updateTabStyles() {
+            const tabs = { today: els.tabToday, tomorrow: els.tabTomorrow };
+            for (const [key, btn] of Object.entries(tabs)) {
+                const on = state.activeTab === key;
+                btn.classList.toggle('is-active', on);
+                btn.setAttribute('aria-selected', String(on));
+            }
+            els.customDateInput.classList.toggle('is-active', state.activeTab === 'custom');
+            els.resultsCard.setAttribute('aria-labelledby',
+                state.activeTab === 'custom' ? 'customDateLabel' : (state.activeTab === 'tomorrow' ? 'tabTomorrow' : 'tabToday'));
+        }
+        function setTimes(values) {
+            for (const [id, v] of Object.entries(values)) els[id].textContent = v;
+        }
+        function clearResults() {
+            stopCountdown();
+            state.target = null;
+            setTimes({
+                timelineBedtime: '--:--', timelineWakeup: '--:--', timelineWindowEnd: '--:--', timelineSunrise: '--:--',
+                targetTimeDisplay: '--:--', windowDisplay: '--:-- – --:--', bedtimeDisplay: '--:--',
+                bedtimeDateDisplay: '--', sunriseDisplay: '--:--', countdownDisplay: '--:--:--'
+            });
+            els.countdownHint.textContent = 'Time remaining until your pre-sunrise awakening';
+            els.dstNote.hidden = true;
+            els.polarNote.hidden = true;
+        }
+
+        /* ================= Forecast (Open-Meteo) ================= */
+        const cacheKey = (lat, lon) => `${lat.toFixed(4)},${lon.toFixed(4)}`;
+
+        function parseForecast(json, key) {
+            if (!json || !json.daily || !Array.isArray(json.daily.time)) {
+                throw userError('Unexpected response from the sunrise service. Please try again later.');
+            }
+            let tz = json.timezone;
+            if (!isValidTimeZone(tz)) {
+                // Fallback: fixed offset from the API (whole hours only), otherwise UTC.
+                const offH = (json.utc_offset_seconds || 0) / 3600;
+                tz = Number.isInteger(offH) && offH !== 0 ? `Etc/GMT${offH > 0 ? '-' : '+'}${Math.abs(offH)}` : 'UTC';
+                if (!isValidTimeZone(tz)) tz = 'UTC';
+            }
+            const { time, sunrise = [], sunset = [] } = json.daily;
+            const days = time.map((t, i) => {
+                const midnight = t * 1000;
+                const date = ymdInTz(midnight + 12 * HOUR_MS, tz);   // noon avoids DST-at-midnight edge cases
+                const sr = Number.isFinite(sunrise[i]) ? sunrise[i] * 1000 : null;
+                const ss = Number.isFinite(sunset[i]) ? sunset[i] * 1000 : null;
+                const hasSunrise = sr !== null && ss !== null && ss > sr && sr !== midnight &&
+                    (ss - sr) < 24 * HOUR_MS - MINUTE_MS && ymdInTz(sr, tz) === date;
+                let polar = null;
+                if (!hasSunrise) polar = (sr !== null && ss !== null && ss - sr >= 23 * HOUR_MS) ? 'day' : 'night';
+                return { date, sunrise: hasSunrise ? sr : null, hasSunrise, polar };
+            });
+            if (!days.length) throw userError('No sunrise data was returned for this location.');
+            return { key, tz, days };
+        }
+
+        async function fetchSolarData({ autoAdvance = true } = {}) {
+            const key = cacheKey(state.lat, state.lon);
+            const cached = forecastCache.get(key);
+            if (cached && Date.now() - cached.fetchedAt < CONFIG.CACHE_TTL_MS &&
+                cached.data.days.some(d => d.date === ymdInTz(Date.now(), cached.data.tz))) {
+                if (forecastController) forecastController.abort();
+                forecastController = null;
+                forecastRequestId++;
+                setLoading(false);
+                state.forecast = cached.data;
+                afterForecastLoaded(autoAdvance);
+                return;
+            }
+
+            if (forecastController) forecastController.abort();
+            const controller = new AbortController();
+            forecastController = controller;
+            const myId = ++forecastRequestId;
+            setLoading(true);
+
+            const url = 'https://api.open-meteo.com/v1/forecast' +
+                `?latitude=${state.lat.toFixed(4)}&longitude=${state.lon.toFixed(4)}` +
+                `&daily=sunrise,sunset&timezone=auto&timeformat=unixtime&forecast_days=${CONFIG.FORECAST_DAYS}`;
+            try {
+                const json = await fetchJson(url, { signal: controller.signal });
+                if (myId !== forecastRequestId) return;
+                const data = parseForecast(json, key);
+                forecastCache.set(key, { data, fetchedAt: Date.now() });
+                state.forecast = data;
+                hideBanner('error');
+                afterForecastLoaded(autoAdvance);
+            } catch (e) {
+                if (myId !== forecastRequestId || e.name === 'AbortError') return;
+                showBanner(friendlyError(e, 'sunrise service'), 'error');
+                if (!state.forecast || state.forecast.key !== key) {   // never show another city's times
+                    state.forecast = null;
+                    clearResults();
+                    els.timezoneBadge.textContent = '--';
+                    els.resultDateHeading.textContent = '--';
+                }
+            } finally {
+                if (myId === forecastRequestId) { setLoading(false); forecastController = null; }
+            }
+        }
+
+        function afterForecastLoaded(autoAdvance) {
+            const f = state.forecast;
+            const now = Date.now();
+            const today = ymdInTz(now, f.tz);
+
+            // Midnight rollover is resolved first, so the date the user was looking at stays selected.
+            handleDayRollover(today);
+
+            if (state.activeTab === 'custom') {
+                const ok = state.customDate && state.customDate >= today && f.days.some(d => d.date === state.customDate);
+                if (!ok) { state.activeTab = 'today'; state.customDate = null; }
+            }
+            if (autoAdvance && state.activeTab === 'today') {
+                const d = f.days.find(x => x.date === today);
+                if (d && d.hasSunrise && now >= d.sunrise - CONFIG.WINDOW_END_BEFORE_SUNRISE_MIN * MINUTE_MS) {
+                    state.activeTab = 'tomorrow';
+                    state.autoAdvanced = true;
+                    showBanner('Today\u2019s Brahma Muhurtha has already passed, so tomorrow is shown. Select \u201cToday\u201d to view it anyway.', 'info');
+                }
+            }
+            renderResults();
+        }
+
+        /* ================= Midnight rollover (Q1 / Q3) ================= */
+        // Map a calendar date onto the right tab relative to the (new) today.
+        function selectDate(dateStr, todayStr) {
+            if (!dateStr || dateStr <= todayStr) { state.activeTab = 'today'; state.customDate = null; }
+            else if (dateStr === addDaysToDateStr(todayStr, 1)) { state.activeTab = 'tomorrow'; state.customDate = null; }
+            else { state.activeTab = 'custom'; state.customDate = dateStr; }
+        }
+        // When the location's date changes while the page is open, keep showing the same morning:
+        // auto-advanced or manually chosen "Tomorrow" becomes "Today"; a custom date stays pinned.
+        // Only a manually chosen "Today" (now in the past) moves forward to the new today.
+        function handleDayRollover(todayStr) {
+            const prev = state.lastTodayStr;
+            if (!prev || prev === todayStr) return;
+            const prevSelected = getSelectedDateStr(prev, addDaysToDateStr(prev, 1));
+            selectDate(prevSelected, todayStr);
+            if (state.autoAdvanced) { state.autoAdvanced = false; hideBanner('info'); }
+            state.lastTodayStr = todayStr;
+        }
+
+        /* ================= Rendering ================= */
+        function getSelectedDateStr(todayStr, tomorrowStr) {
+            if (state.activeTab === 'custom' && state.customDate) return state.customDate;
+            if (state.activeTab === 'tomorrow') return tomorrowStr;
+            return todayStr;
+        }
+
+        function renderResults() {
+            const f = state.forecast;
+            if (!f) { clearResults(); return; }
+            const tz = f.tz;
+            const now = Date.now();
+            const todayStr = ymdInTz(now, tz);
+            handleDayRollover(todayStr);
+            const tomorrowStr = addDaysToDateStr(todayStr, 1);
+            state.lastTodayStr = todayStr;
+
+            els.tabDateToday.textContent = formatDateStr(todayStr, SHORT_DAY);
+            els.tabDateTomorrow.textContent = formatDateStr(tomorrowStr, SHORT_DAY);
+            els.customDateInput.min = todayStr;
+            els.customDateInput.max = f.days[f.days.length - 1].date;
+
+            const selected = getSelectedDateStr(todayStr, tomorrowStr);
+            els.customDateInput.value = selected;
+            updateTabStyles();
+            els.resultDateHeading.textContent = formatDateStr(selected, LONG_DAY);
+
+            const day = f.days.find(d => d.date === selected);
+            if (!day) {
+                clearResults();
+                els.timezoneBadge.textContent = tzLabel(now, tz);
+                showBanner('No sunrise data for this date. Please pick a date within the next 16 days.', 'error');
+                return;
+            }
+            if (!day.hasSunrise) { renderNoSunrise(day, tz, selected); return; }
+
+            const sunrise = day.sunrise;
+            const wake = sunrise - CONFIG.WAKE_BEFORE_SUNRISE_MIN * MINUTE_MS;
+            const windowEnd = sunrise - CONFIG.WINDOW_END_BEFORE_SUNRISE_MIN * MINUTE_MS;
+            const bed = wake - state.sleepHours * HOUR_MS;   // absolute time → correct across DST changes
+            const t = ms => formatTime(ms, tz);
+
+            els.timezoneBadge.textContent = tzLabel(wake, tz);
+            setTimes({
+                timelineBedtime: t(bed), timelineWakeup: t(wake), timelineWindowEnd: t(windowEnd), timelineSunrise: t(sunrise),
+                targetTimeDisplay: t(wake), windowDisplay: `${t(wake)} – ${t(windowEnd)}`,
+                bedtimeDisplay: t(bed), sunriseDisplay: t(sunrise)
+            });
+            const bedDate = ymdInTz(bed, tz);
+            els.bedtimeDateDisplay.textContent = bedDate === selected
+                ? `Same day · ${formatDateStr(bedDate, SHORT_DAY)}`
+                : `Evening before · ${formatDateStr(bedDate, SHORT_DAY)}`;
+
+            // Daylight-saving change between bedtime and wake-up
+            const offBed = offsetMinutes(bed, tz), offWake = offsetMinutes(wake, tz);
+            if (offBed !== offWake) {
+                const from = tzAbbrev(bed, tz) || formatOffset(offBed);
+                const to = tzAbbrev(wake, tz) || formatOffset(offWake);
+                const diff = Math.abs(offWake - offBed);
+                const amount = diff === 60 ? '1 hour' : `${diff} min`;
+                els.dstNote.textContent = `🕒 Clocks go ${offWake < offBed ? 'back' : 'forward'} ${amount} overnight (${from} → ${to}). ` +
+                    `The times shown already account for this, so you still get a full ${state.sleepHours.toFixed(1)} hours of sleep.`;
+                els.dstNote.hidden = false;
+            } else {
+                els.dstNote.hidden = true;
+            }
+            els.polarNote.hidden = true;
+
+            els.srSummary.textContent = `${formatDateStr(selected, LONG_DAY)}: bedtime ${t(bed)}, Brahma Muhurtha starts ${t(wake)}, ` +
+                `ends ${t(windowEnd)}, sunrise ${t(sunrise)}.`;
+            state.target = { wake, windowEnd };
+            startCountdown();
+        }
+
+        function renderNoSunrise(day, tz, selected) {
+            clearResults();
+            els.timezoneBadge.textContent = tzLabel(Date.now(), tz);
+            setTimes({ timelineBedtime: '—', timelineWakeup: '—', timelineWindowEnd: '—', timelineSunrise: '—',
+                targetTimeDisplay: '—', windowDisplay: '—', bedtimeDisplay: '—', bedtimeDateDisplay: '—',
+                sunriseDisplay: '—', countdownDisplay: '—' });
+            els.countdownHint.textContent = 'No sunrise on this date';
+            els.polarNote.textContent = day.polar === 'day'
+                ? 'The sun does not set or rise on this date at this location (midnight sun), so Brahma Muhurtha cannot be calculated from sunrise.'
+                : 'The sun does not rise on this date at this location (polar night), so Brahma Muhurtha cannot be calculated from sunrise.';
+            els.polarNote.hidden = false;
+            els.srSummary.textContent = `${formatDateStr(selected, LONG_DAY)}: no sunrise at this location.`;
+        }
+
+        /* ================= Countdown ================= */
+        function stopCountdown() {
+            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+        }
+        function startCountdown() {
+            stopCountdown();               // never stack intervals
+            tick();
+            countdownTimer = setInterval(tick, 1000);
+        }
+        function tick() {
+            const f = state.forecast;
+            if (!f) return;
+            const now = Date.now();
+            const todayNow = ymdInTz(now, f.tz);
+            if (state.lastTodayStr && todayNow !== state.lastTodayStr) {
+                // Midnight passed at the location: re-render immediately from the data we have
+                // (rollover keeps the same morning selected), then refresh in the background.
+                renderResults();
+                fetchSolarData({ autoAdvance: false });
+                return;
+            }
+            if (!state.target) return;
+            const { wake, windowEnd } = state.target;
+            if (now < wake) {
+                els.countdownDisplay.textContent = formatDuration(wake - now);
+                els.countdownHint.textContent = 'Time remaining until your pre-sunrise awakening';
+            } else if (now < windowEnd) {
+                els.countdownDisplay.textContent = 'Now';
+                els.countdownHint.textContent = `Brahma Muhurtha in progress, ends ${formatTime(windowEnd, f.tz)}`;
+            } else {
+                els.countdownDisplay.textContent = 'Passed';
+                els.countdownHint.textContent = 'This wake-up time has already passed';
+            }
+        }
+
+        /* ================= Location ================= */
+        function applyLocation(name, lat, lon) {
+            if (!isValidCoord(lat, lon)) {
+                showBanner('The location service returned invalid coordinates. Please try another search.', 'error');
+                return;
+            }
+            state.lat = roundTo(lat, 4);
+            state.lon = roundTo(lon, 4);
+            state.cityName = sanitizeName(name);
+            state.lastTodayStr = null;     // new time zone: a different "today" is not a midnight rollover
+            if (state.autoAdvanced && state.activeTab === 'tomorrow') {   // re-evaluate for the new location
+                state.activeTab = 'today';
+                state.autoAdvanced = false;
+            }
+            hideBanner('info');
+            updateLocationLabel();
+            persistState();
+            fetchSolarData({ autoAdvance: true });
+        }
+
+        function quickSelectCity(name, lat, lon) {
+            locationRequestId++;           // cancels any pending search/GPS result
+            els.cityInput.value = '';
+            hideBanner('error');
+            applyLocation(name, lat, lon);
+        }
+
+        function buildPlaceName(r, fallback) {
+            const a = (r && r.address) || {};
+            const place = a.city || a.town || a.village || a.municipality || a.suburb || a.hamlet || a.county || a.state || (r && r.name);
+            const country = a.country;
+            let name = place && country && place !== country ? `${place}, ${country}` : (place || country || '');
+            if (!name && r && r.display_name) name = r.display_name.split(',').slice(0, 2).map(s => s.trim()).join(', ');
+            return sanitizeName(name || fallback);
+        }
+
+        async function searchCity() {
+            const q = els.cityInput.value.trim();
+            if (!q) { showBanner('Please enter a city name.', 'error'); els.cityInput.focus(); return; }
+            if (q.length < 2) { showBanner('Please enter at least 2 characters.', 'error'); return; }
+            if (activeGeoRequests > 0) return;   // ignore repeated Enter / clicks while searching
+
+            const myId = ++locationRequestId;
+            activeGeoRequests++;
+            updateGeoBusy();
+            hideBanner('error');
+            try {
+                const url = 'https://nominatim.openstreetmap.org/search' +
+                    `?q=${encodeURIComponent(q)}&format=jsonv2&limit=1&addressdetails=1&accept-language=en`;
+                const data = await nominatimFetch(url);
+                if (myId !== locationRequestId) return;
+                if (!Array.isArray(data) || data.length === 0) {
+                    throw userError(`No place found for \u201c${q}\u201d. Please check the spelling.`);
+                }
+                const r = data[0];
+                const lat = parseFloat(r.lat);
+                const lon = parseFloat(r.lon);
+                applyLocation(buildPlaceName(r, q), lat, lon);
+                els.cityInput.value = '';
+            } catch (e) {
+                if (myId !== locationRequestId) return;
+                showBanner(friendlyError(e, 'location search service'), 'error');
+            } finally {
+                activeGeoRequests--;
+                updateGeoBusy();
+            }
+        }
+
+        function useCurrentLocation() {
+            if (!('geolocation' in navigator)) {
+                showBanner('Location access is not supported by this browser. Please search for your city instead.', 'error');
+                return;
+            }
+            if (!window.isSecureContext) {
+                showBanner('GPS only works on a secure page (https:// or localhost). Please search for your city instead.', 'error');
+                return;
+            }
+            if (activeGeoRequests > 0) return;
+
+            const myId = ++locationRequestId;
+            activeGeoRequests++;
+            updateGeoBusy();
+            hideBanner('error');
+
+            const done = () => { activeGeoRequests--; updateGeoBusy(); };
+            navigator.geolocation.getCurrentPosition(async pos => {
+                try {
+                    if (myId !== locationRequestId) return;
+                    const lat = roundTo(pos.coords.latitude, 4);
+                    const lon = roundTo(pos.coords.longitude, 4);
+                    applyLocation(`Current location (${lat.toFixed(2)}°, ${lon.toFixed(2)}°)`, lat, lon);
+                    // Best effort: replace the coordinate label with a readable place name.
+                    try {
+                        const r = await nominatimFetch('https://nominatim.openstreetmap.org/reverse' +
+                            `?lat=${lat}&lon=${lon}&format=jsonv2&zoom=10&addressdetails=1&accept-language=en`);
+                        if (myId === locationRequestId && r && !r.error) {
+                            state.cityName = buildPlaceName(r, state.cityName);
+                            updateLocationLabel();
+                            persistState();
+                        }
+                    } catch (e) { /* keep the coordinate label */ }
+                } finally {
+                    done();
+                }
+            }, err => {
+                done();
+                if (myId !== locationRequestId) return;
+                const messages = {
+                    1: 'Location permission was denied. Allow it in your browser settings or search for your city.',
+                    2: 'Your position is currently unavailable. Please try again or search for your city.',
+                    3: 'Getting your location timed out. Please try again.'
+                };
+                showBanner(messages[err.code] || 'Could not get your location. Please search for your city.', 'error');
+            }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60 * 1000 });
+        }
+
+        /* ================= Tabs, date picker, slider ================= */
+        function switchTab(tab) {
+            state.activeTab = tab;
+            state.customDate = null;
+            state.autoAdvanced = false;
+            hideBanner('info');
+            renderResults();
+        }
+
+        function onTabKeydown(e) {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            e.preventDefault();
+            const next = e.currentTarget === els.tabToday ? els.tabTomorrow : els.tabToday;
+            next.focus();
+            switchTab(next === els.tabToday ? 'today' : 'tomorrow');
+        }
+
+        function onCustomDateChange() {
+            const f = state.forecast;
+            if (!f) return;
+            const v = els.customDateInput.value;
+            const today = ymdInTz(Date.now(), f.tz);
+            const min = els.customDateInput.min, max = els.customDateInput.max;
+            if (!v) { renderResults(); return; }   // cleared → restore current selection
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v < min || v > max) {
+                showBanner(`Please choose a date between ${formatDateStr(min, SHORT_DAY)} and ${formatDateStr(max, SHORT_DAY)}.`, 'error');
+                renderResults();
+                return;
+            }
+            hideBanner();
+            if (v === today) { switchTab('today'); return; }
+            if (v === addDaysToDateStr(today, 1)) { switchTab('tomorrow'); return; }
+            state.activeTab = 'custom';
+            state.customDate = v;
+            state.autoAdvanced = false;
+            renderResults();
+        }
+
+        function onSleepSliderChange() {
+            const v = parseFloat(els.sleepSlider.value);
+            if (!Number.isFinite(v)) return;
+            state.sleepHours = Math.min(CONFIG.SLEEP_MAX_H, Math.max(CONFIG.SLEEP_MIN_H, Math.round(v * 2) / 2));
+            updateSleepLabels();
+            persistState();
+            if (state.forecast) renderResults();   // no refetch needed
+        }
+
+        /* ================= Init ================= */
+        function init() {
+            [
+                'banner', 'bannerText', 'bannerClose', 'cityInput', 'searchBtn', 'gpsBtn', 'activeLocationLabel', 'timezoneBadge',
+                'tabToday', 'tabTomorrow', 'tabDateToday', 'tabDateTomorrow', 'customDateInput', 'sleepSlider',
+                'sleepDurationLabel', 'bedtimeHeaderLabel', 'loadingState', 'resultsCard', 'resultDateHeading', 'dstNote',
+                'polarNote', 'timelineBedtime', 'timelineWakeup', 'timelineWindowEnd', 'timelineSunrise', 'targetTimeDisplay',
+                'windowDisplay', 'bedtimeDisplay', 'bedtimeDateDisplay', 'sunriseDisplay', 'countdownDisplay', 'countdownHint', 'srSummary'
+            ].forEach(id => { els[id] = document.getElementById(id); });
+            els.chips = document.querySelectorAll('.chip');
+
+            loadSavedState();
+            updateLocationLabel();
+            els.sleepSlider.value = String(state.sleepHours);
+            updateSleepLabels();
+
+            els.searchBtn.addEventListener('click', searchCity);
+            els.gpsBtn.addEventListener('click', useCurrentLocation);
+            els.cityInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); searchCity(); }
+            });
+            els.bannerClose.addEventListener('click', () => hideBanner());
+            els.chips.forEach(chip => chip.addEventListener('click', () =>
+                quickSelectCity(chip.dataset.city, parseFloat(chip.dataset.lat), parseFloat(chip.dataset.lon))));
+            els.tabToday.addEventListener('click', () => switchTab('today'));
+            els.tabTomorrow.addEventListener('click', () => switchTab('tomorrow'));
+            els.tabToday.addEventListener('keydown', onTabKeydown);
+            els.tabTomorrow.addEventListener('keydown', onTabKeydown);
+            els.customDateInput.addEventListener('change', onCustomDateChange);
+            els.sleepSlider.addEventListener('input', onSleepSliderChange);
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) fetchSolarData({ autoAdvance: false });   // uses cache unless stale
+            });
+            window.addEventListener('online', () => { if (!state.forecast) fetchSolarData({ autoAdvance: true }); });
+
+            fetchSolarData({ autoAdvance: true });
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+        else init();
+    })();
+    </script>
+</body>
+</html>
